@@ -65,6 +65,49 @@ class SQLPipeline:
 
             - NEVER use DATE(date) directly.
             - NEVER assume the date format.
+            SAFE AGGREGATION RULES
+                ----------------------
+
+                You MUST choose the correct aggregation based on the column type:
+
+                1) NEVER SUM constant or structural fields  
+                These fields represent hotel attributes that do NOT change daily:  
+                - Rooms_Available  
+
+                If the question is about total rooms, capacity, number of rooms, etc. → ALWAYS use:
+
+                    MAX(Rooms_Available)
+
+                Never use SUM(Rooms_Available).
+
+                2) ONLY aggregate fields that vary daily  
+                Allowed to SUM or AVG:  
+                - Rooms_Sold  
+                - ADR  
+                - ADR_Competition  
+                - Occupancy  
+                - Occupancy_Competition  
+                - Revenue (ADR * Rooms_Sold)
+
+                3) REVENUE RULE  
+                If the question mentions “revenue”, “income”, “earnings”:  
+
+                    SUM(ADR * Rooms_Sold)
+
+                4) AVOID WRONG SUMMATIONS  
+                Do NOT generate queries that:  
+                - Sum occupancy rates  
+                - Sum ADR  
+                - Sum percentages  
+                (Use AVG instead.)
+
+                5) HOTEL LIST RULE  
+                If the question asks for hotels, names, or “how many hotels”:  
+
+                    SELECT DISTINCT hotel_name
+
+                6) ALWAYS choose the aggregation that logically answers the question.  
+                Never guess or invent fields.
 
             Database schema:
             {schema}

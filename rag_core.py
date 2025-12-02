@@ -163,6 +163,7 @@ class RAGPipeline:
             You are a helpful assistant that answers questions based **only** on the provided context.
             if they thankyou and say great job, say you're welcome and ask them if they have any other questions.
             If the answer is not in the context, say you don't know.
+            If you find the price of hotel or revenue or any other financial number then it end add AED in the end of the number.
 
             Context:
             {context}
