@@ -40,8 +40,12 @@ class RAGPipeline:
     def _load_documents(self) -> List:
         """
         Load supported documents from the data directory.
+        Add minimal metadata for PDF files (hotel_name, source, page).
         """
-        loaders = [
+        docs: List = []
+
+        # --------- Load TXT / MD / CSV as usual ---------
+        generic_loaders = [
             DirectoryLoader(
                 settings.data_dir,
                 glob="**/*.txt",
@@ -61,20 +65,49 @@ class RAGPipeline:
                 loader_kwargs={"encoding": "utf-8"},
                 show_progress=True,
             ),
-            DirectoryLoader(
-                settings.data_dir,
-                glob="**/*.pdf",
-                loader_cls=PyPDFLoader,
-                show_progress=True,
-            ),
         ]
 
-        docs: List = []
-        for loader in loaders:
+        # Load generic documents
+        for loader in generic_loaders:
             try:
                 docs.extend(loader.load())
-            except Exception as exc:  # pragma: no cover - defensive
-                print(f"Error while loading with loader {loader}: {exc}")
+            except Exception as exc:
+                print(f"Error loading documents with loader {loader}: {exc}")
+
+        # --------- Load PDFs with metadata enhancement ---------
+        pdf_files = [
+            f for f in os.listdir(settings.data_dir)
+            if f.endswith(".pdf")
+        ]
+
+        for pdf in pdf_files:
+            full_path = os.path.join(settings.data_dir, pdf)
+
+            try:
+                loader = PyPDFLoader(full_path)
+                pages = loader.load()
+
+                # Convert filename → clean hotel name
+                hotel_name = (
+                    pdf.replace("_profile.pdf", "")
+                    .replace(".pdf", "")
+                    .replace("_", " ")
+                    .title()
+                )
+
+                # Add metadata
+                for page in pages:
+                    page.metadata["hotel_name"] = hotel_name
+                    page.metadata["source"] = pdf
+                    page.metadata["page"] = page.metadata.get("page")
+
+                docs.extend(pages)
+
+            except Exception as exc:
+                print(f"Error loading PDF {pdf}: {exc}")
+
+
+
         return docs
 
     def ingest(self) -> None:
@@ -125,7 +158,9 @@ class RAGPipeline:
 
         prompt = ChatPromptTemplate.from_template(
             """
+            if they greet you, say hi back and ask them what they want to know.
             You are a helpful assistant that answers questions based **only** on the provided context.
+            if they thankyou and say great job, say you're welcome and ask them if they have any other questions.
             If the answer is not in the context, say you don't know.
 
             Context:
