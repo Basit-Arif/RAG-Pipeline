@@ -67,7 +67,8 @@ class Question(BaseModel):
 @app.post("/ask")
 def ask(question: Question):
     result = qa_pipeline.ask(question.question)
-    return {"route": result.route, "answer": result.answer}
+    return {"route": result.route, "answer": result.answer,"sql_query": result.sql_query,
+            "sql_raw_result": result.sql_raw_result}
 
 
 # ------------------------
