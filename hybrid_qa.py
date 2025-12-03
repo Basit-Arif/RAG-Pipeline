@@ -109,20 +109,30 @@ class HybridQAPipeline:
         # Ask the LLM to explain the SQL result in natural language
         explanation_prompt = ChatPromptTemplate.from_template(
             """
-You are given a user's question and the raw result of an SQL query that answers it.
-Explain the answer clearly and concisely in natural language.
+            You are given a user's question and the raw result of an SQL query that answers it.
+            Explain the answer clearly and concisely in natural language.
 
-Question:
-{question}
+            IMPORTANT RULES:
+            - Treat the SQL result as the only source of truth for numbers and dates.
+            - If the SQL result contains MULTIPLE ROWS with the same extreme value
+              (e.g. several days all with the same highest occupancy or ADR),
+              you MUST list **all** of those rows in the answer.
+            - Do NOT arbitrarily pick just one row when there are ties.
+            - For date questions like \"when did X have the highest Y\", if several dates
+              share the same highest Y, explicitly mention that there are multiple dates
+              and enumerate each date with its value.
 
-SQL query:
-{sql_query}
+            Question:
+            {question}
 
-SQL result:
-{sql_result}
+            SQL query:
+            {sql_query}
 
-Natural language answer:
-""".strip()
+            SQL result:
+            {sql_result}
+
+            Natural language answer:
+            """.strip()
         )
         msg = explanation_prompt.format(
             question=question,
@@ -153,30 +163,48 @@ Natural language answer:
         # Compose a final answer using both
         combo_prompt = ChatPromptTemplate.from_template(
             """
-You are given:
-- A user's question
-- The result of an SQL query that computes exact numeric values relevant to the question
-- A contextual answer from a RAG system over documents
+            You must combine an SQL result (numeric truth) and a RAG context answer (qualitative info).
 
-Combine them into a single, coherent answer:
-- Use the SQL result as the source of truth for any numeric values.
-- Use the RAG answer only for qualitative/contextual explanation.
-- If there is a conflict, trust the SQL numbers.
+            RULES:
+            ================================================
+            1. SQL IS ALWAYS THE SOURCE OF TRUTH
+            - All numeric values MUST come from SQL only.
+            - NEVER modify or infer numbers beyond SQL.
 
-Question:
-{question}
+            2. RAG IS OPTIONAL AND SECONDARY
+            - Use RAG only for description, features, context, or explanation.
+            - Keep RAG contribution short (1–2 sentences max).
+            - If RAG contradicts SQL → ignore the RAG part entirely.
 
-SQL query:
-{sql_query}
+            3. MULTIPLE ROW RULE
+            - If SQL returned multiple rows, list ALL rows.
+            - Do NOT summarize, compress, or pick a single value.
 
-SQL result:
-{sql_result}
+            4. EMPTY SQL RESULT
+            - If SQL result is empty: say “No matching data found.”
+            - Do NOT use RAG to guess numeric values.
 
-RAG context answer:
-{rag_answer}
+            5. NO HALLUCINATION
+            - Never add hotels, metrics, dates, or numbers not present.
+            - Never guess or invent interpretations.
 
-Final answer:
-""".strip()
+            ================================================
+
+            User Question:
+            {question}
+
+            SQL Query:
+            {sql_query}
+
+            SQL Result:
+            {sql_result}
+
+            RAG Context:
+            {rag_answer}
+
+            ================================================
+            Final Answer:
+            """.strip()
         )
         msg = combo_prompt.format(
             question=question,

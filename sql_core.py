@@ -49,89 +49,131 @@ class SQLPipeline:
         # Prompt to generate SQL directly from schema + question
         self.sql_prompt = ChatPromptTemplate.from_template(
             """
-            You are an expert MySQL analyst and SQL generator.
-            Use ONLY the tables and columns provided.
+          You are an expert MySQL analyst. Generate ONLY valid MySQL queries.
 
-            IMPORTANT — DATE RULE:
-            - The `date` column is stored as a TEXT string.
-            - Its format may vary (e.g., '2025-08-21', '21/08/2025', '08/21/2025').
-            - ALWAYS parse it safely using:
+====================================================
+DATE COLUMN RULE (CRITICAL)
+====================================================
+The table contains a REAL parsed DATE column:
 
-            COALESCE(
-                STR_TO_DATE(date, '%Y-%m-%d'),
-                STR_TO_DATE(date, '%d/%m/%Y'),
-                STR_TO_DATE(date, '%m/%d/%Y')
-            )
+    parsed_date_temp  (type: DATE)
 
-            - NEVER use DATE(date) directly.
-            - NEVER assume the date format.
-            SAFE AGGREGATION RULES
-                ----------------------
+There may also be a raw TEXT column `date` (format 'DD/MM/YYYY'), but
+you should NOT use it for logic anymore.
 
-                You MUST choose the correct aggregation based on the column type:
+Rules:
+- ALWAYS use parsed_date_temp for ANY date filtering, comparison, grouping, ordering.
+- NEVER invent or use columns like PARSED_DATE or PARSED_DATE_TEMP
+  (only parsed_date_temp exists, with this exact lowercase name).
+- To extract date parts, always use:
+    YEAR(parsed_date_temp)
+    MONTH(parsed_date_temp)
+    DAY(parsed_date_temp)
 
-                1) NEVER SUM constant or structural fields  
-                These fields represent hotel attributes that do NOT change daily:  
-                - Rooms_Available  
+====================================================
+AGGREGATION RULES
+====================================================
+1) NEVER SUM structural fields  
+   - Rooms_Available → ALWAYS use MAX(Rooms_Available)
 
-                If the question is about total rooms, capacity, number of rooms, etc. → ALWAYS use:
+2) Allowed to SUM or AVG (daily-changing fields):
+   - Rooms_Sold
+   - ADR
+   - ADR_Competition
+   - Occupancy
+   - Occupancy_Competition
+   - Revenue → (ADR * Rooms_Sold)
 
-                    MAX(Rooms_Available)
+3) Do NOT SUM:
+   - Occupancy
+   - ADR
+   - Percentages  
+   (Use AVG instead.)
 
-                Never use SUM(Rooms_Available).
+4) HOTEL LIST RULE  
+   If question asks for hotel list or count:
+       SELECT DISTINCT hotel_name
 
-                2) ONLY aggregate fields that vary daily  
-                Allowed to SUM or AVG:  
-                - Rooms_Sold  
-                - ADR  
-                - ADR_Competition  
-                - Occupancy  
-                - Occupancy_Competition  
-                - Revenue (ADR * Rooms_Sold)
+====================================================
+MYSQL ONLY_FULL_GROUP_BY RULE
+====================================================
+In this MySQL server, sql_mode includes ONLY_FULL_GROUP_BY.
 
-                3) REVENUE RULE  
-                If the question mentions “revenue”, “income”, “earnings”:  
+Therefore:
+ - If you use ANY aggregate function (SUM, AVG, MAX, MIN, COUNT, etc.)
+   together with non-aggregated columns in the SELECT list, you MUST add
+   a GROUP BY clause.
+ - In that GROUP BY, list EVERY non-aggregated column from SELECT.
+ - Example:
+       SELECT t1.parsed_date_temp, t1.occupancy, AVG(t2.occupancy) AS occupancy_last_year
+       ...
+   MUST have:
+       GROUP BY t1.parsed_date_temp, t1.occupancy;
+ - Do NOT select non-aggregated columns that are not listed in GROUP BY.
 
-                    SUM(ADR * Rooms_Sold)
+====================================================
+EXTREME VALUE RULE (MAX/MIN/HIGHEST/BEST/WORST)
+====================================================
+If the question asks for:
+- highest
+- lowest
+- best
+- worst
+- max
+- min
+- peak
+- record
+- strongest
+- weakest
+- busiest
 
-                4) AVOID WRONG SUMMATIONS  
-                Do NOT generate queries that:  
-                - Sum occupancy rates  
-                - Sum ADR  
-                - Sum percentages  
-                (Use AVG instead.)
+Then you MUST:
+1. Compute extreme value using a subquery.
+2. Return ALL matching rows.
+3. NEVER use LIMIT 1.
+4. ALWAYS allow ties.
 
-                5) HOTEL LIST RULE  
-                If the question asks for hotels, names, or “how many hotels”:  
+====================================================
+YEAR-OVER-YEAR SAME-DAY RULE
+====================================================
+When user asks:
+"same day last year"  
+"what was 2024 value on that day"  
+etc.
 
-                    SELECT DISTINCT hotel_name
+Then:
+- Match rows using same DAY + same MONTH **for the same hotel**.
+- Compare YEAR(parsed_date_temp) = X AND YEAR(parsed_date_temp) = X-1
+- NEVER use aliases like PARSED_DATE in JOIN conditions.
+- When comparing a metric like occupancy between years on the same day,
+  aggregate the "last year" side with AVG(...) so there is exactly ONE
+  value per day for that year (e.g. AVG(t2.occupancy) AS occupancy_last_year).
 
-                6) ALWAYS choose the aggregation that logically answers the question.  
-                Never guess or invent fields.
-                
-            EXTREME VALUE LOGIC (Generalized)
-            ---------------------------------
-            If the user's question asks for any form of an extreme value—
-            such as highest, lowest, best, worst, max, min, peak, record,
-            top performance, strongest day, weakest day, busiest day, etc.—
-            you MUST:
+Pattern:
+    JOIN <same_table_name> t2
+    ON  t1.hotel_name = t2.hotel_name
+    AND DAY(t1.parsed_date_temp) = DAY(t2.parsed_date_temp)
+    AND MONTH(t1.parsed_date_temp) = MONTH(t2.parsed_date_temp)
+    AND YEAR(t1.parsed_date_temp) = X
+    AND YEAR(t2.parsed_date_temp) = X - 1
 
-            1. First compute the extreme value (MAX or MIN) for the target column.
-            2. Then return ALL rows that match that extreme value.
-            3. NEVER use LIMIT 1.
-            4. ALWAYS allow ties; return all matching dates/hotels.
+====================================================
+SAFETY RULES
+====================================================
+- NEVER invent columns.
+- NEVER guess table names.
+- NEVER output explanations.
+- Output ONLY a valid SQL query.
 
-            Examples: “highest occupancy”, “best ADR”, “peak revenue”, etc.
+====================================================
+SCHEMA
+{schema}
 
-            Database schema:
-            {schema}
+====================================================
+USER QUESTION
+{question}
 
-            Write ONLY a valid MySQL SQL query (no explanation).
-            The query must answer the user's question.
-
-            Question:
-            {question}
-            """.strip()
+Write ONLY the SQL query:""".strip()
         )
 
     def ask_sql(self, question: str) -> SQLAnswer:
