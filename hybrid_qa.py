@@ -16,19 +16,50 @@ Route = Literal["sql", "rag", "sql+rag"]
 
 router_prompt = ChatPromptTemplate.from_template(
     """
-You are a routing classifier deciding whether a question should be answered using SQL or RAG.
+You are a routing classifier that must decide whether a question should be answered using:
+- "sql"       → only SQL database
+- "rag"       → only PDF/context documents
+- "sql+rag"   → SQL first, then RAG for extra descriptive context
 
-Always choose **SQL** when:
-- The question asks for counts (e.g., "how many...", "number of...", "count all...")
-- The question asks to list items (e.g., "list hotels", "show all hotels", "names of...")
-- The question asks about any data found in database tables
-- The question can be answered directly from structured data
+===========================
+WHEN TO USE SQL
+===========================
+Choose **SQL** when the question:
+- asks for counts: ("how many", "number of", "count all")
+- asks to list items: ("list hotels", "show hotels", "names of")
+- requests metrics: ADR, occupancy, rooms, revenue
+- involves totals (SUM), averages (AVG), minimum, maximum
+- asks for rankings: ("best", "worst", "highest", "lowest")
+- involves comparisons based on numeric data
+- uses date filtering: 2024, 2025, yesterday, last month
+- can be fully answered from structured tabular data
 
-Choose **RAG** only when:
-- The question requires long-form description, comparison, hotel features, amenities, views, areas, etc.
-- The answer must come from PDF documents and not from SQL tables.
+===========================
+WHEN TO USE RAG
+===========================
+Choose **RAG** when the question:
+- asks for descriptions, features, amenities, views
+- asks qualitative questions: (“tell me about…”, “describe…”)
+- requires content from PDFs (hotel profiles)
+- cannot be answered from numeric data alone
 
-Classify this question strictly as either "sql" or "rag":
+=====================================
+WHEN TO USE SQL+RAG (HYBRID)
+==============================
+Choose **sql+rag** when BOTH structured numeric data AND PDF description are needed.
+Examples:
+- “Which hotel performed best and why?”
+- “Which hotel had highest ADR and what makes it unique?”
+- “Compare hotels by occupancy and describe their differences.”
+- “Show the top hotel and summarize its amenities.”
+
+===========================
+OUTPUT FORMAT
+===========================
+Return ONLY one route:
+- sql
+- rag
+- sql+rag
 
 Question: {question}
 """.strip()

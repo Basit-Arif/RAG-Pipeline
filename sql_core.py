@@ -108,6 +108,20 @@ class SQLPipeline:
 
                 6) ALWAYS choose the aggregation that logically answers the question.  
                 Never guess or invent fields.
+                
+            EXTREME VALUE LOGIC (Generalized)
+            ---------------------------------
+            If the user's question asks for any form of an extreme value—
+            such as highest, lowest, best, worst, max, min, peak, record,
+            top performance, strongest day, weakest day, busiest day, etc.—
+            you MUST:
+
+            1. First compute the extreme value (MAX or MIN) for the target column.
+            2. Then return ALL rows that match that extreme value.
+            3. NEVER use LIMIT 1.
+            4. ALWAYS allow ties; return all matching dates/hotels.
+
+            Examples: “highest occupancy”, “best ADR”, “peak revenue”, etc.
 
             Database schema:
             {schema}
