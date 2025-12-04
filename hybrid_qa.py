@@ -181,6 +181,10 @@ class HybridQAPipeline:
             - For date questions like \"when did X have the highest Y\", if several dates
               share the same highest Y, explicitly mention that there are multiple dates
               and enumerate each date with its value.
+            - All monetary values are in AED. Never use the \"$\" symbol.
+              When you mention a monetary amount (ADR, revenue, etc.), either:
+              - append \" AED\" after the number (e.g. 1200.50 AED), or
+              - clearly state in text that the numbers are in AED.
 
             Question:
             {question}

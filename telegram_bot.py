@@ -6,6 +6,8 @@ from telegram import Update
 from telegram.ext import Application, MessageHandler, filters, ContextTypes
 from telegram.error import TimedOut
 from pydantic import BaseModel
+import logging
+
 
 from hybrid_qa import HybridQAPipeline
 
@@ -51,7 +53,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     result = qa_pipeline.ask(full_question)
 
-    reply = f"🔎 *Route*: `{result.route}`\n\n{result.answer}"
+    reply = f"{result.answer}"
+    logger.info("🤖 LLM Answer:\n%s", reply)
 
     # Update memory for this chat (keep last ~10 turns)
     history.append(f"User: {user_message}")
